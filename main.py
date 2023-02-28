@@ -9,15 +9,14 @@ def sheet_key(sheet: 'Sheet') -> 'Tuple[str, str, str]':
 	return view_key(sheet.view())
 
 def view_key(view: 'View') -> 'Tuple[str, str, str]':
-	return (view.file_name().lower() or '', )
+	file_name = view.file_name() or ''
+	return (file_name.lower(), )
 
 def sort_sheets(window: 'Window') -> None:
 	"""
 	Sorts the sheets of the given window
 	"""
 	global OT_SETTINGS
-
-	break_preview_on_click = OT_SETTINGS.get('break_preview_on_click', False)
 
 	sheet_list = window.sheets()
 	sheet_list = sorted(sheet_list, key=sheet_key)
@@ -26,35 +25,44 @@ def sort_sheets(window: 'Window') -> None:
 	# So store the old focus
 	active_sheet = window.active_sheet()
 
-	for idx, sheet in enumerate(sheet_list):
-		if not break_preview_on_click and (sheet.is_transient() or sheet.is_semi_transient()):
-			# Do not set the index of a transient sheet; this will
-			# cause the sheet to stop being transient
-			# Since we set the index of all other sheets,
-			# the transient sheet should end up at the right place anyhow.
-			continue
+	# Find if there's a transient sheet
+	# This is also known as 'preview on click'
+	# We need to special case this
+	semi_transient_sheet_list = [x for x in sheet_list if x.is_semi_transient()]
+	if len(semi_transient_sheet_list) > 1:
+		sys.stderr.write('Do not understand how to deal with multiple semi transient windows')
+		return
 
-		window.set_sheet_index(sheet, sheet.group(), idx)
+	if not semi_transient_sheet_list:
+		# When there are no semi-transient sheets, it's easy
+		# Just set the index for each sheet
+		for idx, sheet in enumerate(sheet_list):
+			window.set_sheet_index(sheet, sheet.group(), idx)
+	else:
+		# When there are semi-transient sheets, it's tricky
+		# Because setting the index on a transient sheet makes it
+		# non-transient.
+		# So we have to set the index for all sheets, EXCEPT
+		# the transient one
+		# To make this stable, we first order all the sheets
+		# before the transient sheet ordered from left to right,
+		# and then the sheets after the transient sheet ordered
+		# from right to left. This makes the sorting stable.
+
+		# len(semi_transient_sheet_list) == 1
+		semi_transient_sheet = semi_transient_sheet_list[0]
+		semi_transient_sheet_index = sheet_list.index(semi_transient_sheet)
+
+		index_list = list(enumerate(sheet_list))
+
+		for idx, sheet in index_list[:semi_transient_sheet_index]:
+			window.set_sheet_index(sheet, sheet.group(), idx)
+
+		for idx, sheet in reversed(index_list[semi_transient_sheet_index + 1:]):
+			window.set_sheet_index(sheet, sheet.group(), idx)
 
 	# Restore the old focus
 	window.focus_sheet(active_sheet)
-
-def sort_views(window: 'Window') -> None:
-	"""
-	Sorts the views of the given window
-	"""
-	view_list = window.views(include_transient=True)
-	view_list = sorted(view_list, key=view_key)
-
-	# Sorting messes up the focus
-	# So store the old focus
-	active_view = window.active_view()
-
-	for idx, view in enumerate(view_list):
-		window.set_view_index(view, 0, idx)
-
-	# Restore the old focus
-	window.focus_view(active_view)
 
 class OrderExistingTabsCommand(sublime_plugin.WindowCommand):
 	def run(self):
@@ -67,12 +75,29 @@ class OrderExistingTabsCommand(sublime_plugin.WindowCommand):
 		sort_sheets(window)
 
 class OrderedTabsEventListener(sublime_plugin.EventListener):
-	def on_load(self, view: 'View') -> None:
+	def on_new(self, view: 'View') -> None:
+		"""
+		Called when a new file is created.
+
+		Sort to make sure the file is on the left
+		"""
 		sort_sheets(view.window())
 
-	# def on_post_save(self, view: 'View') -> None:
-	# 	# After a view is saved, the path may have changed
-	# 	sort_sheets(view.window())
+	def on_load(self, view: 'View') -> None:
+		"""
+		Called when the file is finished loading.
+
+		We sort the tabs whenever a new file is loaded
+		"""
+		sort_sheets(view.window())
+
+	def on_post_save(self, view: 'View') -> None:
+		"""
+		Called after a view has been saved.
+
+		The path may have changed, so we sort again
+		"""
+		sort_sheets(view.window())
 
 def plugin_loaded():
 	global OT_SETTINGS
