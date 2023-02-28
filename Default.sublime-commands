@@ -1,0 +1,6 @@
+[
+	{
+		"caption": "Order existing tabs",
+		"command": "order_existing_tabs",
+	},
+]
