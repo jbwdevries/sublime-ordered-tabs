@@ -10,7 +10,7 @@ How to install locally
 ----------------------
 On Linux:
 
-1. `cd .config/sublime-text/Packages/`
+1. `cd ~/.config/sublime-text/Packages/`
 2. `ln -s ~/projects/github.com/jbwdevries/sublime-ordered-tabs/ OrderedTabs`
 
 [1] https://packagecontrol.io/packages/SortTabs
