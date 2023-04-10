@@ -89,6 +89,9 @@ class OrderedTabsEventListener(sublime_plugin.EventListener):
 
 		We sort the tabs whenever a new file is loaded
 		"""
+		if view.sheet().is_transient():
+			return
+
 		sort_sheets(view.window())
 
 	def on_post_save(self, view: 'View') -> None:
